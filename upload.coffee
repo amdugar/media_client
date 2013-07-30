@@ -1,4 +1,3 @@
-
 fs = require 'fs'
 http = require 'http'
 {spawn} = require 'child_process'
@@ -15,17 +14,21 @@ opt = {
   port: 3000
   path: "/stream/#{token}/upload/"
 }
-req = http.request opt, (res) ->
-  console.log 'got upload response'
-p = spawn '/usr/local/bin/ffmpeg', [
-  '-r', "#{fps}",
-  '-f', 'image2pipe',
-  '-vcodec', 'ppm',
-  '-i', '-',
-  '-vcodec', 'libx264',
-  '-f', 'mpegts',
-  '-'
-]
+p = spawn '/usr/local/Cellar/ffmpeg/1.2.1/bin/ffmpeg', [
+    '-re',
+    '-r', "#{fps}",
+    '-f', 'image2pipe',
+    '-vcodec', 'ppm',
+    '-threads', '8'
+    '-i', '-',
+    '-s', '1280x720',
+    '-aspect', '16:9',
+    '-g', "5",
+    '-f', 'flv',
+    '-qmin', '5',
+    '-qmax', '5',
+    'rtmp://localhost/live/mystream'
+  ]
 console.log "*** PID #{p.pid}"
 process.stdin.resume()
 process.stdin.pipe p.stdin
@@ -34,6 +37,3 @@ p.on 'exit', () ->
   console.log '**** ffmpeg exited'
 
 console.log 'Started.'
-
-p.stdout.pipe req
-
