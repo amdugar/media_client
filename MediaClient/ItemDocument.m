@@ -3,7 +3,7 @@
 
 #import <AVFoundation/AVFoundation.h>
 
-#define FRAMES_PER_SECOND 15
+#define FRAMES_PER_SECOND 1
 
 @implementation ItemDocument
 
@@ -12,6 +12,7 @@ NSFileHandle *file;
 BOOL single_frame = false;
 BOOL all_frames = false;
 BOOL original = true;
+double global_time;
 
 - (id)initWithType:(NSString *)typeName error:(NSError **)outError
 {
@@ -50,10 +51,15 @@ BOOL original = true;
             [task launch];
             
             taskStdin = [[task standardInput] fileHandleForWriting];
-        }
+        } 
     }
     
     return self;
+}
+
+- (void)setDate
+{
+    global_time = (double)[[NSDate date] timeIntervalSince1970];
 }
 
 - (void)printStats:(NSTimer*)timer
@@ -187,7 +193,8 @@ BOOL original = true;
 // video frame was written
 - (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sb fromConnection:(AVCaptureConnection *)connection
 {
-    /*if ( ! task) {
+
+        /*if ( ! task) {
         task = [[NSTask alloc] init];
         [task setLaunchPath:@"/usr/local/bin/coffee"];
         [task setEnvironment:[NSDictionary dictionaryWithObjectsAndKeys:
@@ -202,24 +209,43 @@ BOOL original = true;
         [task launch];
         
         taskStdin = [[task standardInput] fileHandleForWriting];
-    }
-    
-   */
-    
+    }*/
+    /*
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(outData:)                                      name:NSFileHandleDataAvailableNotification object:taskStdin];
+    [taskStdin waitForDataInBackgroundAndNotify];*/
     if (numFramesCaptured == 0) {
         initializedAt = [[NSDate date] timeIntervalSince1970];
+        [self setDate];
         if (single_frame || all_frames)
             [[NSFileManager defaultManager] createFileAtPath:@"/Users/anil/Desktop/temp1.raw" contents:nil attributes:nil];
         
     }
+    
+
+    
+    double currTime = [[NSDate date] timeIntervalSince1970];
+    
+    if (numFramesCaptured == 0)
+        NSLog(@"Time 0");
+    else if ((currTime - global_time) * 1000 < (double)(1000/FRAMES_PER_SECOND)){
+        NSLog(@"DROP Time %f", (currTime - global_time) * 1000);
+        return;
+    }
+    numFramesCaptured += 1;
+    if (numFramesCaptured != 0){
+        NSLog(@"TIme %f", (currTime - global_time) * 1000);
+        global_time = currTime;
+    }
+
     if(all_frames) {
         file = [NSFileHandle fileHandleForUpdatingAtPath: @"/Users/anil/Desktop/temp1.raw"];
         [file seekToEndOfFile];
     }
-    numFramesCaptured += 1;
+    
     
     CVImageBufferRef img = CMSampleBufferGetImageBuffer(sb);
-    CGSize encodedSize = CVImageBufferGetEncodedSize(img);
+    //CGSize encodedSize =
+    CVImageBufferGetEncodedSize(img);
     
     CVPixelBufferLockBaseAddress(img, 0);
     
@@ -228,12 +254,12 @@ BOOL original = true;
     int width = (int)CVPixelBufferGetWidth(img); 
     int height = (int)CVPixelBufferGetHeight(img); 
     if (original)
-        [taskStdin writeData:[[NSString stringWithFormat:@"P6\n%d %d\n255\n", (int)width, (int)height]
-                                dataUsingEncoding:NSUTF8StringEncoding]];
+        [taskStdin writeData:[[NSString stringWithFormat:@"P6\n%d %d\n255\n", (int)width, (int)height]                     dataUsingEncoding:NSUTF8StringEncoding]];
    
     NSData *pixels = [[NSData alloc] initWithBytesNoCopy:baseAddress length:(bytesPerRow * height) freeWhenDone:NO];
     
     NSTimeInterval startTime = [[NSDate date] timeIntervalSince1970];
+    
     if (original)
         [taskStdin writeData:pixels];
     
@@ -253,8 +279,9 @@ BOOL original = true;
 
     NSTimeInterval endTime = [[NSDate date] timeIntervalSince1970];
     double captureTime = endTime - startTime;
-    NSLog(@"captureTIme %f", captureTime * 1000);
+    //NSLog(@"captureTIme %f", captureTime * 1000);
     CVPixelBufferUnlockBaseAddress(img, 0);
+    
     
     //NSLog(@"[SAMPLE] RGB [%d, %d]", (int)encodedSize.width, (int)encodedSize.height);
     
@@ -277,6 +304,19 @@ BOOL original = true;
      */
 }
 
+-(void) outData: (NSNotification *) notification
+{
+    NSFileHandle *fileHandle = (NSFileHandle*) [notification object];
+    NSData *data = [fileHandle availableData];
+    
+    if ([data length]) {
+        
+        NSString *currentString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        // do something
+    }
+    
+    [fileHandle waitForDataInBackgroundAndNotify]; //Checks to see if data is available in a background thread.
+}
 
 #pragma mark Document Stuff
 
