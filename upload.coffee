@@ -27,8 +27,8 @@ p = spawn '/usr/local/Cellar/ffmpeg/1.2.1/bin/ffmpeg', [
     '-f', 'flv',
     '-qmin', '5',
     '-qmax', '5',
-    'rtmp://localhost/live/mystream'
-  ]
+    'rtmp://10.0.0.10/live/mystream'
+  ] 
 console.log "*** PID #{p.pid}"
 process.stdin.resume()
 process.stdin.pipe p.stdin

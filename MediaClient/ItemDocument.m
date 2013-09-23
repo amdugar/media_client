@@ -3,12 +3,15 @@
 
 #import <AVFoundation/AVFoundation.h>
 
-#define FRAMES_PER_SECOND 4
+#define FRAMES_PER_SECOND 15
 
 @implementation ItemDocument
 
 @synthesize captureSession = captureSession, captureScreenInput = captureScreenInput;
-
+NSFileHandle *file;
+BOOL single_frame = false;
+BOOL all_frames = false;
+BOOL original = true;
 
 - (id)initWithType:(NSString *)typeName error:(NSError **)outError
 {
@@ -25,12 +28,29 @@
             return nil;
         }
         
-        [NSTimer
-             scheduledTimerWithTimeInterval:(500 / 1000.0)
+/*       [NSTimer
+             scheduledTimerWithTimeInterval:(10 / 1000.0)
              target:self
              selector:@selector(printStats:)
              userInfo:nil
-             repeats:YES];
+             repeats:YES];*/
+        
+        if ( ! task) {
+            task = [[NSTask alloc] init];
+            [task setLaunchPath:@"/usr/local/bin/coffee"];
+            [task setEnvironment:[NSDictionary dictionaryWithObjectsAndKeys:
+                                  NSUserName(),                       @"USER",
+                                  @"/usr/local/bin:/usr/bin:/bin",    @"PATH",
+                                  nil]];
+            [task setArguments:[NSArray arrayWithObjects:
+                                [[NSBundle mainBundle] pathForResource:@"upload" ofType:@"coffee"],
+                                [NSString stringWithFormat:@"%d", (int)FRAMES_PER_SECOND],
+                                nil]];
+            [task setStandardInput:[NSPipe pipe]];
+            [task launch];
+            
+            taskStdin = [[task standardInput] fileHandleForWriting];
+        }
     }
     
     return self;
@@ -167,7 +187,7 @@
 // video frame was written
 - (void)captureOutput:(AVCaptureOutput *)captureOutput didOutputSampleBuffer:(CMSampleBufferRef)sb fromConnection:(AVCaptureConnection *)connection
 {
-    if ( ! task) {
+    /*if ( ! task) {
         task = [[NSTask alloc] init];
         [task setLaunchPath:@"/usr/local/bin/coffee"];
         [task setEnvironment:[NSDictionary dictionaryWithObjectsAndKeys:
@@ -184,9 +204,17 @@
         taskStdin = [[task standardInput] fileHandleForWriting];
     }
     
+   */
     
     if (numFramesCaptured == 0) {
         initializedAt = [[NSDate date] timeIntervalSince1970];
+        if (single_frame || all_frames)
+            [[NSFileManager defaultManager] createFileAtPath:@"/Users/anil/Desktop/temp1.raw" contents:nil attributes:nil];
+        
+    }
+    if(all_frames) {
+        file = [NSFileHandle fileHandleForUpdatingAtPath: @"/Users/anil/Desktop/temp1.raw"];
+        [file seekToEndOfFile];
     }
     numFramesCaptured += 1;
     
@@ -195,17 +223,37 @@
     
     CVPixelBufferLockBaseAddress(img, 0);
     
-    void *baseAddress = CVPixelBufferGetBaseAddress(img); 
+    void *baseAddress = CVPixelBufferGetBaseAddress(img);
     size_t bytesPerRow = CVPixelBufferGetBytesPerRow(img); 
     int width = (int)CVPixelBufferGetWidth(img); 
     int height = (int)CVPixelBufferGetHeight(img); 
-    
-    [taskStdin writeData:[[NSString stringWithFormat:@"P6\n%d %d\n255\n", (int)width, (int)height]
+    if (original)
+        [taskStdin writeData:[[NSString stringWithFormat:@"P6\n%d %d\n255\n", (int)width, (int)height]
                                 dataUsingEncoding:NSUTF8StringEncoding]];
-    
+   
     NSData *pixels = [[NSData alloc] initWithBytesNoCopy:baseAddress length:(bytesPerRow * height) freeWhenDone:NO];
-    [taskStdin writeData:pixels];
     
+    NSTimeInterval startTime = [[NSDate date] timeIntervalSince1970];
+    if (original)
+        [taskStdin writeData:pixels];
+    
+    if (single_frame) {
+        NSError *error = nil;
+        NSString *str = [NSString stringWithFormat:@"P6\n%d %d\n255\n", (int)width, (int)height];
+        [str writeToFile:@"/Users/anil/Desktop/temp1.raw" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [pixels writeToFile:@"/Users/anil/Desktop/temp1.raw" options:NSDataWritingAtomic error:&error];
+    }
+    
+    if(all_frames) {
+        [file writeData:[[NSString stringWithFormat:@"P6\n%d %d\n255\n", (int)width, (int)height]
+                     dataUsingEncoding:NSUTF8StringEncoding]];
+        [file writeData:pixels];
+    }
+    
+
+    NSTimeInterval endTime = [[NSDate date] timeIntervalSince1970];
+    double captureTime = endTime - startTime;
+    NSLog(@"captureTIme %f", captureTime * 1000);
     CVPixelBufferUnlockBaseAddress(img, 0);
     
     //NSLog(@"[SAMPLE] RGB [%d, %d]", (int)encodedSize.width, (int)encodedSize.height);
@@ -282,9 +330,9 @@
     return YES;
 }
 
-+ (BOOL)autosavesInPlace
+/*+ (BOOL)autosavesInPlace
 {
     return YES;
-}
+}*/
 
 @end
