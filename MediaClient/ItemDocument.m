@@ -3,7 +3,7 @@
 
 #import <AVFoundation/AVFoundation.h>
 
-#define FRAMES_PER_SECOND 1
+#define FRAMES_PER_SECOND 40
 
 @implementation ItemDocument
 
@@ -231,11 +231,12 @@ double global_time;
         NSLog(@"DROP Time %f", (currTime - global_time) * 1000);
         return;
     }
-    numFramesCaptured += 1;
+    
     if (numFramesCaptured != 0){
         NSLog(@"TIme %f", (currTime - global_time) * 1000);
         global_time = currTime;
     }
+    numFramesCaptured += 1;
 
     if(all_frames) {
         file = [NSFileHandle fileHandleForUpdatingAtPath: @"/Users/anil/Desktop/temp1.raw"];
